@@ -115,7 +115,7 @@ def run_vlm(question, image_url):
         return_tensors="pt",
     ).to(model.device, dtype=torch.bfloat16)
 
-    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=128)
+    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
     generated_ids_trimmed = [
         out[len(in_):] for in_, out in zip(inputs.input_ids, generated_ids)
     ]
@@ -167,8 +167,6 @@ def pipeline_from_file(audio_path, image_url=IMAGE_URL):
     print("\n[VLM] Inference...")
     answer = run_vlm(question, image_url)
     print(f"Answer: {answer}")
-
-pipeline_from_file("test_audio.wav")
 
 
 if __name__ == "__main__":
