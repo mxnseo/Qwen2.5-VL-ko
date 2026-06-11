@@ -43,6 +43,14 @@ def measure_inference(func):
         print(f"\n[{func.__name__}] Inference Time: {elapsed:.3f} s")
         if torch.cuda.is_available():
             print(f"VRAM: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+
+        # if result == token -> token/s time
+        if isinstance(result, tuple) and len(result) == 2:
+            actual_result, n_tokens = result
+            if isinstance(n_tokens, int):
+                print(f"Tokens: {n_tokens} | {n_tokens / elapsed:.1f} tok/s")
+            return actual_result
+
         return result
     return wrapper
 
@@ -98,6 +106,11 @@ def run_stt(audio_array):
 @measure_inference
 def run_vlm(question, image_url):
     messages = [
+        # 필요하면 role과 content를 추가해서 조건을 걸 수 있음
+        {
+            "role": "system",
+            "content": "You are a helpful assistant. Always respond in Korean only. Never mix other languages."
+        },
         {
             "role": "user",
             "content": [
@@ -115,7 +128,11 @@ def run_vlm(question, image_url):
         return_tensors="pt",
     ).to(model.device, dtype=torch.bfloat16)
 
-    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
+    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=128)
+    
+    input_len = inputs.input_ids.shape[-1]
+    n_tokens = generated_ids.shape[-1] - input_len
+
     generated_ids_trimmed = [
         out[len(in_):] for in_, out in zip(inputs.input_ids, generated_ids)
     ]
@@ -124,7 +141,7 @@ def run_vlm(question, image_url):
         skip_special_tokens=True,
         clean_up_tokenization_spaces=False,
     )[0]
-    return answer
+    return answer, n_tokens
 
 
 """
