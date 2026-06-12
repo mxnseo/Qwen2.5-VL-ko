@@ -3,6 +3,9 @@
 
 # conda env setup (get_started.py)
 """
+
+    -- RTX 4070 PC --
+
     conda activate qwen25vl
 
     pip install funasr
@@ -10,6 +13,21 @@
     pip install sounddevice
 
     sudo apt-get install libportaudio2
+    sudo apt-get install ffmpeg
+
+
+    -- Jetson AGX Orin 64GB --
+
+    conda activate qwen25vl
+
+    pip install funasr
+    pip install sounddevice
+    pip install openai-whisper
+    pip install librosa
+
+    sudo apt-get install libportaudio2
+    sudo apt-get install ffmpeg
+
 
 """
 
@@ -17,8 +35,17 @@ import torch
 import time
 import numpy as np
 import sounddevice as sd
-import torchaudio
+# RTX 4070 ver
+"""
+import torchaudio 
 from funasr import AutoModel as STTModel
+
+"""
+
+# Jetson AGX Orin ver
+import librosa
+import whisper
+
 from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
 # settting
@@ -66,11 +93,18 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 
 # ---
 
+# RTX 4070
+"""
 stt_model = STTModel(
     model="iic/SenseVoiceSmall",
     trust_remote_code=True,
     device="cuda"
 )
+
+"""
+
+# Jetson Orin AGX
+stt_model = whisper.load_model("large-v3-turbo", device="cuda")
 
 
 # Voice record
@@ -87,7 +121,8 @@ def record_audio(duration=RECORD_SEC, sample_rate=SAMPLE_RATE):
     return audio.flatten()
 
 
-# STT inference
+# STT inference - RTX 4070
+"""
 @measure_inference
 def run_stt(audio_array):
     result = stt_model.generate(
@@ -100,6 +135,19 @@ def run_stt(audio_array):
     raw = result[0]["text"]
     text = raw.split(">")[-1].strip() if ">" in raw else raw.strip()
     return text
+
+"""
+
+
+# STT inference - Jetson AGX Orin
+@measure_inference
+def run_stt(input_data):
+    result = stt_model.transcribe(
+        input_data,
+        language="ko",
+        fp16=True
+    )
+    return result["text"].strip()
 
 
 # VLM Inference
@@ -128,7 +176,7 @@ def run_vlm(question, image_url):
         return_tensors="pt",
     ).to(model.device, dtype=torch.bfloat16)
 
-    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=64)
+    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=128)
     
     input_len = inputs.input_ids.shape[-1]
     n_tokens = generated_ids.shape[-1] - input_len
@@ -171,11 +219,17 @@ def pipeline(image_url=IMAGE_URL):
 # Audio file test
 
 def pipeline_from_file(audio_path, image_url=IMAGE_URL):
-    # wav file test
+    # wav file test - RTX 4070
+    """
     waveform, sr = torchaudio.load(audio_path)
     if sr != SAMPLE_RATE:
         waveform = torchaudio.functional.resample(waveform, sr, SAMPLE_RATE)
     audio = waveform.squeeze().numpy()
+
+    """
+
+    # wav file test - Jetson AGX Orin
+    audio, _ = librosa.load(audio_path, sr=SAMPLE_RATE)
 
     print(f"\n[STT] '{audio_path}' file Inference...")
     question = run_stt(audio)
