@@ -17,6 +17,23 @@
     # Qwen VL util
     pip install qwen-vl-utils[decord]==0.0.8
 
+
+    -- Jetson AGX Orin --
+
+    conda create -n qwen25vl python=3.10 -y
+    conda activate qwen25vl
+
+    pip install torch-2.5.0-cp310-cp310-linux_aarch64.whl
+    pip install torchvision-0.20.0-cp310-cp310-linux_aarch64.whl
+
+    # transformers (pip version -> qwen2_5_vl KeyError)
+    pip install git+https://github.com/huggingface/transformers accelerate
+
+    # Qwen VL util
+    pip install qwen-vl-utils==0.0.8
+
+    pip install "numpy<2"
+
 """
 
 from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
@@ -40,6 +57,14 @@ def measure_inference(func):
         print(f"\n[{func.__name__}] Inference Time: {elapsed:.3f} s")
         if torch.cuda.is_available():
             print(f"VRAM: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+
+        # if result == token -> token/s time
+        if isinstance(result, tuple) and len(result) == 2:
+            actual_result, n_tokens = result
+            if isinstance(n_tokens, int):
+                print(f"Tokens: {n_tokens} | {n_tokens / elapsed:.1f} tok/s")
+            return actual_result
+
         return result
     return wrapper
 
@@ -62,6 +87,10 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 def simple_inference():
     messages = [
         {
+            "role": "system",
+            "content": "Answer only used english"
+        },
+        {
             "role": "user",
             "content": [
                 {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"},
@@ -78,7 +107,11 @@ def simple_inference():
         return_tensors="pt",
     ).to(model.device, dtype=torch.bfloat16)
 
-    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
+    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=64)
+
+    input_len = inputs.input_ids.shape[-1]
+    n_tokens = generated_ids.shape[-1] - input_len
+
     generated_ids_trimmed = [
         out[len(in_):] for in_, out in zip(inputs.input_ids, generated_ids)
     ]
@@ -89,7 +122,8 @@ def simple_inference():
     )
     print(generated_texts[0])
 
-simple_inference()
+    return generated_ids[0], n_tokens
+
 
 
 
@@ -115,7 +149,11 @@ def korean_inference():
         return_tensors="pt",
     ).to(model.device, dtype=torch.bfloat16)
 
-    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
+    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=64)
+
+    input_len = inputs.input_ids.shape[-1]
+    n_tokens = generated_ids.shape[-1] - input_len
+
     generated_ids_trimmed = [
         out[len(in_):] for in_, out in zip(inputs.input_ids, generated_ids)
     ]
@@ -126,7 +164,7 @@ def korean_inference():
     )
     print(generated_texts[0])
 
-korean_inference()
+    return generated_ids[0], n_tokens
 
 
 
@@ -153,7 +191,11 @@ def object_recognition():
         return_tensors="pt",
     ).to(model.device, dtype=torch.bfloat16)
 
-    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=16)
+    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=64)
+
+    input_len = inputs.input_ids.shape[-1]
+    n_tokens = generated_ids.shape[-1] - input_len
+
     generated_ids_trimmed = [
         out[len(in_):] for in_, out in zip(inputs.input_ids, generated_ids)
     ]
@@ -164,7 +206,8 @@ def object_recognition():
     )
     print(generated_texts[0])
 
-object_recognition()
+    return generated_ids[0], n_tokens
+
 
 
 
@@ -191,7 +234,11 @@ def multi_image_inference():
         return_tensors="pt",
     ).to(model.device, dtype=torch.bfloat16)
 
-    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
+    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=64)
+
+    input_len = inputs.input_ids.shape[-1]
+    n_tokens = generated_ids.shape[-1] - input_len
+
     generated_ids_trimmed = [
         out[len(in_):] for in_, out in zip(inputs.input_ids, generated_ids)
     ]
@@ -202,4 +249,12 @@ def multi_image_inference():
     )
     print(generated_texts[0])
 
-multi_image_inference()
+    return generated_ids[0], n_tokens
+
+
+
+if __name__ == "__main__":
+    simple_inference()
+    korean_inference()
+    object_recognition()
+    multi_image_inference()

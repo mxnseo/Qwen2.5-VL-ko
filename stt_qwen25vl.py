@@ -128,7 +128,7 @@ def run_vlm(question, image_url):
         return_tensors="pt",
     ).to(model.device, dtype=torch.bfloat16)
 
-    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=128)
+    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=64)
     
     input_len = inputs.input_ids.shape[-1]
     n_tokens = generated_ids.shape[-1] - input_len
