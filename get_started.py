@@ -17,6 +17,9 @@
     # Qwen VL util
     pip install qwen-vl-utils[decord]==0.0.8
 
+    # if fine-tuning model load
+    pip install peft
+
 
     -- Jetson AGX Orin --
 
@@ -68,15 +71,60 @@ def measure_inference(func):
         return result
     return wrapper
 
-model_path = "Qwen/Qwen2.5-VL-3B-Instruct"
-processor = AutoProcessor.from_pretrained(model_path)
-model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-    model_path,
-    torch_dtype=torch.bfloat16,
-    # attn_implementation="flash_attention_2",
-    attn_implementation="sdpa",
-    device_map="auto"
-)
+# model_path = "Qwen/Qwen2.5-VL-3B-Instruct"
+# processor = AutoProcessor.from_pretrained(model_path)
+# model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+#     model_path,
+#     torch_dtype=torch.bfloat16,
+#     # attn_implementation="flash_attention_2",
+#     attn_implementation="sdpa",
+#     device_map="auto"
+# )
+
+# fine-tuning model load
+
+# from peft import PeftModel
+# import os
+
+# BASE_MODEL = "Qwen/Qwen2.5-VL-3B-Instruct"
+# LORA_PATH = "/home/airlab/fine-tune/Qwen-VL-Series-Finetune/output/qwen25vl-airlab-lora/checkpoint-38"
+
+# processor = AutoProcessor.from_pretrained(LORA_PATH)
+# model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+#     BASE_MODEL,
+#     torch_dtype=torch.bfloat16,
+#     attn_implementation="sdpa",
+#     device_map="auto"
+# )
+# model = PeftModel.from_pretrained(model, LORA_PATH)
+
+# non_lora_path = os.path.join(LORA_PATH, "non_lora_state_dict.bin")
+# if os.path.exists(non_lora_path):
+#     non_lora = torch.load(non_lora_path, map_location="cpu")
+#     model.load_state_dict(non_lora, strict=False)
+
+# model.eval()
+
+
+# vllm model load
+import base64
+from vllm import LLM, SamplingParams
+
+QUANT_MODEL_PATH = "./vLLM_Qwen2.5-VL/qwen2.5-vl-vllm"
+
+llm = None
+
+# only vLLM
+# MERGED_MODEL_PATH = "./vLLM_Qwen2.5-VL/qwen2.5-vl-merged"
+
+sampling_params = SamplingParams(temperature=0.0, max_tokens=64)
+
+def to_image_url(source: str) -> str:
+    if source.startswith("http://") or source.startswith("https://"):
+        return source
+    with open(source, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("utf-8")
+    return f"data:image/jpeg;base64,{b64}"
 
 # ---
 
@@ -135,36 +183,44 @@ def korean_inference():
         {
             "role": "user",
             "content": [
-                {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"},
-                {"type": "text", "text": "이 이미지에 무엇이 있나요? "},
+                {"type": "image_url", "image_url": {"url": to_image_url("test_c.png")}},
+                {"type": "text", "text": "사진 속 장소는 어디인가요?"},
             ]
         },
     ]
 
-    inputs = processor.apply_chat_template(
-        messages,
-        add_generation_prompt=True,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt",
-    ).to(model.device, dtype=torch.bfloat16)
+    # inputs = processor.apply_chat_template(
+    #     messages,
+    #     add_generation_prompt=True,
+    #     tokenize=True,
+    #     return_dict=True,
+    #     return_tensors="pt",
+    # ).to(model.device, dtype=torch.bfloat16)
 
-    generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=64)
+    # generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=64)
 
-    input_len = inputs.input_ids.shape[-1]
-    n_tokens = generated_ids.shape[-1] - input_len
+    # input_len = inputs.input_ids.shape[-1]
+    # n_tokens = generated_ids.shape[-1] - input_len
 
-    generated_ids_trimmed = [
-        out[len(in_):] for in_, out in zip(inputs.input_ids, generated_ids)
-    ]
-    generated_texts = processor.batch_decode(
-        generated_ids_trimmed,
-        skip_special_tokens=True,
-        clean_up_tokenization_spaces=False,
-    )
-    print(generated_texts[0])
+    # generated_ids_trimmed = [
+    #     out[len(in_):] for in_, out in zip(inputs.input_ids, generated_ids)
+    # ]
+    # generated_texts = processor.batch_decode(
+    #     generated_ids_trimmed,
+    #     skip_special_tokens=True,
+    #     clean_up_tokenization_spaces=False,
+    # )
+    # print(generated_texts[0])
 
-    return generated_ids[0], n_tokens
+    # return generated_ids[0], n_tokens
+
+    outputs = llm.chat(messages, sampling_params=sampling_params)
+    generated_text = outputs[0].outputs[0].text
+    n_tokens = len(outputs[0].outputs[0].token_ids)
+
+    print(generated_text)
+
+    return generated_text, n_tokens
 
 
 
@@ -254,7 +310,24 @@ def multi_image_inference():
 
 
 if __name__ == "__main__":
-    simple_inference()
+    # vLLM + llmcompressor
+    llm = LLM(
+        model=QUANT_MODEL_PATH,
+        quantization="compressed-tensors",
+        max_model_len=4096,
+        gpu_memory_utilization=0.85,
+        limit_mm_per_prompt={"image": 2}
+    )
+
+    # llm = LLM(
+    #     model=MERGED_MODEL_PATH,
+    #     max_model_len=4096,
+    #     gpu_memory_utilization=0.85,
+    #     limit_mm_per_prompt={"image": 2}
+    # )    
+
+    # simple_inference()
     korean_inference()
-    object_recognition()
-    multi_image_inference()
+    korean_inference()
+    # object_recognition()
+    # multi_image_inference()
