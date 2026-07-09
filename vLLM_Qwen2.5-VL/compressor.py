@@ -1,10 +1,34 @@
 """
+    RTX 4070 SUPER PC
+    
     conda create -n vllm_qwen25vl python=3.10 -y
     conda activate vllm_qwen25vl
 
     pip install vllm
     pip install llmcompressor
-    
+
+    ---
+
+    Jetson AGX Orin 64GB
+
+    sudo apt update
+    sudo apt install -y nvidia-container curl
+    curl https://get.docker.com | sh && sudo systemctl --now enable docker
+    sudo nvidia-ctk runtime configure --runtime=docker
+
+    sudo apt install -y jq
+    sudo jq '. + {"default-runtime": "nvidia"}' /etc/docker/daemon.json 2>/dev/null | \
+      sudo tee /etc/docker/daemon.json.tmp && \
+      sudo mv /etc/docker/daemon.json.tmp /etc/docker/daemon.json
+
+    sudo systemctl daemon-reload
+    sudo systemctl restart docker
+
+    git clone https://github.com/dusty-nv/jetson-containers
+    cd jetson-containers
+    bash install.sh
+    jetson-containers run $(autotag vllm)
+
 """
 
 import json

@@ -310,6 +310,7 @@ def multi_image_inference():
 
 
 if __name__ == "__main__":
+    # Jetson -> gpu-memory_utilization=0.7
     # vLLM + llmcompressor
     llm = LLM(
         model=QUANT_MODEL_PATH,
